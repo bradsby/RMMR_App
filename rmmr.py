@@ -1,7 +1,8 @@
 import datetime as dt
-import os
 from io import BytesIO
+import os
 
+import csv
 from kneed import KneeLocator
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -11,7 +12,6 @@ from scipy.spatial import distance
 import seaborn as sns
 from sklearn.cluster import KMeans
 import streamlit as st
-import csv
 
 
 @st.cache
@@ -56,37 +56,53 @@ def uniquify(path: str) -> str:
 
 
 def find_headers(df):
-    if ("L_average" in df.columns) and ("L_Average_Wet" in df.columns):
-        if df["L_average"].isna().sum() <= df["L_Average_Wet"].isna().sum():
-            color_labels = ["L_average", "A_average", "B_Average"]
+    """
+    Determine the proper color and PSD headers in Proficient
+
+    Parameters
+    ----------
+    df : DataFrame
+
+    Returns
+    -------
+    color_labels : list(str)
+    psd_labels : list(str)  
+    color_headers : list(str)
+    psd_headers : list(str)
+
+    """
+
+    if ("L_AVERAGE" in df.columns) and ("L_AVERAGE_WET" in df.columns):
+        if df["L_AVERAGE"].isna().sum() <= df["L_AVERAGE_WET"].isna().sum():
+            color_labels = ["L_AVERAGE", "A_AVERAGE", "B_AVERAGE"]
             psd_labels = ["PSD"]
         else:
-            color_labels = ["L_Average_Wet", "A_Average_Wet", "B_Average_Wet"]
+            color_labels = ["L_AVERAGE_WET", "A_AVERAGE_WET", "B_AVERAGE_WET"]
             psd_labels = [
-                "45_Micron_Cambria_Microtrac",
-                "30_Micron_Cambria_Microtrac",
-                "10_Micron_Cambria_Microtrac",
-                "2_Micron_Cambria_Microtrac",
+                "45_MICRON_CAMBRIA_MICROTRAC",
+                "30_MICRON_CAMBRIA_MICROTRAC",
+                "10_MICRON_CAMBRIA_MICROTRAC",
+                "2_MICRON_CAMBRIA_MICROTRAC",
                 "D10_Cambria_Microtrac",
                 "D50_Cambria_Microtrac",
                 "D90_Cambria_Microtrac",
             ]
-    elif "L_average" in df.columns:
-        color_labels = ["L_average", "A_average", "B_Average"]
+    elif "L_AVERAGE" in df.columns:
+        color_labels = ["L_AVERAGE", "A_AVERAGE", "B_AVERAGE"]
         psd_labels = ["PSD"]
-    elif "L_Average_Wet" in df.columns:
-        color_labels = ["L_Average_Wet", "A_Average_Wet", "B_Average_Wet"]
+    elif "L_AVERAGE_WET" in df.columns:
+        color_labels = ["L_AVERAGE_WET", "A_AVERAGE_WET", "B_AVERAGE_WET"]
         psd_labels = [
-            "45_Micron_Cambria_Microtrac",
-            "30_Micron_Cambria_Microtrac",
-            "10_Micron_Cambria_Microtrac",
-            "2_Micron_Cambria_Microtrac",
+            "45_MICRON_CAMBRIA_MICROTRAC",
+            "30_MICRON_CAMBRIA_MICROTRAC",
+            "10_MICRON_CAMBRIA_MICROTRAC",
+            "2_MICRON_CAMBRIA_MICROTRAC",
             "D10_Cambria_Microtrac",
             "D50_Cambria_Microtrac",
             "D90_Cambria_Microtrac",
         ]
 
-    base_headers = ["Lot", "Bag_Numbers", "PO_or_BOL"]
+    base_headers = ["LOT", "BAG_NUMBERS", "PO_or_BOL"]
 
     color_headers = base_headers.copy()
     color_headers.extend(color_labels)
@@ -98,22 +114,37 @@ def find_headers(df):
 
 
 def find_parameters(material_type, test):
+    """
+    Determine proper parameters based on material type (Grit or Powder) and test type
+    (Color or PSD)
+
+    Parameters
+    ----------
+    material_type : str
+    test : str
+
+    Returns
+    -------
+    parameters : list(str)
+
+    """
+
     if material_type == "Grit" and test == "Color":
-        parameters = ["L_average", "A_average", "B_Average"]
+        parameters = ["L_AVERAGE", "A_AVERAGE", "B_AVERAGE"]
     elif material_type == "Grit" and test == "PSD":
         parameters = ["PSD"]
     elif material_type == "Powder" and test == "Color":
         parameters = [
-            "L_Average_Wet",
-            "A_Average_Wet",
-            "B_Average_Wet",
+            "L_AVERAGE_WET",
+            "A_AVERAGE_WET",
+            "B_AVERAGE_WET",
         ]
     elif material_type == "Powder" and test == "PSD":
         parameters = [
-            "45_Micron_Cambria_Microtrac",
-            "30_Micron_Cambria_Microtrac",
-            "10_Micron_Cambria_Microtrac",
-            "2_Micron_Cambria_Microtrac",
+            "45_MICRON_CAMBRIA_MICROTRAC",
+            "30_MICRON_CAMBRIA_MICROTRAC",
+            "10_MICRON_CAMBRIA_MICROTRAC",
+            "2_MICRON_CAMBRIA_MICROTRAC",
         ]
 
     return parameters
@@ -151,21 +182,64 @@ def add_value_labels(ax, spacing=5):
 
 
 def format_headers(df):
-    df.columns = df.columns.str.replace(" ", "_")
+    """
+    Replace spaces with underscores and capitalize the column headers
+
+    Parameters
+    ----------
+    df : DataFrame
+
+    Returns
+    -------
+    df : DataFrame
+
+    """
+
+    df.columns = df.columns.str.replace(" ", "_").str.upper()
     return df
 
 
 def clean_proficient_data(df, headers):
-    return df[headers].dropna().drop_duplicates(["Lot", "Bag_Numbers"])
+    """
+    Remove duplicate tests from specified columns.
+
+    Parameters
+    ----------
+    df : DataFrame
+    headers : list(str)
+
+    Returns
+    -------
+    DataFrame
+
+    """
+
+    return df[headers].dropna().drop_duplicates(["LOT", "BAG_NUMBERS"])
 
 
 def calc_lot_averages(df_rm, df_prof, headers, labels):
-    df_lot_avgs = df_prof.groupby("Lot")[labels].mean()
+    """
+    Create dataframe of lot averages for each label.
+
+    Parameters
+    ----------
+    df_rm : DataFrame
+    df_prof : DataFrame
+    headers : list(str)
+    labels : list(str)
+
+    Returns
+    -------
+    df_fill_blanks : DataFrame
+
+    """
+
+    df_lot_avgs = df_prof.groupby("LOT")[labels].mean()
 
     df_fill_blanks = df_rm.merge(
         right=df_lot_avgs,
-        left_on="Lot",
-        right_on="Lot",
+        left_on="LOT",
+        right_on="LOT",
         how="left",
         suffixes=("", "_x"),
     )
@@ -174,57 +248,114 @@ def calc_lot_averages(df_rm, df_prof, headers, labels):
 
 
 def merge_tests_and_averages(df_rm, df_prof, df_blanks, labels, test):
+    """
+    Merge dataframe with test results and update with dataframe with averages to fill in
+    blank values.
+
+    Parameters
+    ----------
+    df_rm : DataFrame
+    df_prof : DataFrame
+    df_blanks : DataFrame
+    labels : list(str)
+    test : str
+
+    Returns
+    -------
+    df_merged : DataFrame
+
+    """
+
     df_merged = df_rm.merge(
         right=df_prof,
-        left_on=["Lot", "Bag"],
-        right_on=["Lot", "Bag_Numbers"],
+        left_on=["LOT", "BAG"],
+        right_on=["LOT", "BAG_NUMBERS"],
         how="left",
     )
-    df_merged[f"{test}_Result_Source"] = "Calculated"
-    df_merged.loc[df_merged[labels[0]].notna(), f"{test}_Result_Source"] = "Tested"
+    df_merged[f"{test.str.upper()}_RESULT_SOURCE"] = "Calculated"
+    df_merged.loc[df_merged[labels[0]].notna(), f"{test.str.upper()}_RESULT_SOURCE"] = "Tested"
     df_merged.update(df_blanks, overwrite=False)
 
     return df_merged
 
 
 def set_inventory_dtypes(df):
+    """
+    Set the data types of columns in the dataframe
+
+    Parameters
+    ----------
+    df : DataFrame
+
+    Returns
+    -------
+    df : DataFrame
+
+    """
+    
     df = df.fillna(0)
-    df["Physical_Format"] = df["Physical_Format"].astype("category")
-    df["Item_Description"] = df["Item_Description"].astype("category")
-    df["Item"] = df["Item"].astype("int64")
-    df["Lot"] = df["Lot"].astype("string")
-    df["Bag"] = df["Bag"].astype("int16")
+    df["PHYSICAL_FORMAT"] = df["PHYSICAL_FORMAT"].astype("category")
+    df["ITEM_DESCRIPTION"] = df["ITEM_DESCRIPTION"].astype("category")
+    df["ITEM"] = df["ITEM"].astype("int64")
+    df["LOT"] = df["LOT"].astype("string")
+    df["BAG"] = df["BAG"].astype("int16")
     df["LOT_NUMBER"] = df["LOT_NUMBER"].astype("string")
-    df["Qty_kg"] = df["Qty_kg"].astype("float64")
-    df["Qty_lb"] = df["Qty_lb"].astype("float64")
-    df["Location"] = df["Location"].astype("category")
-    df["Locator"] = df["Locator"].astype("string")
-    df["Date_Received"] = pd.to_datetime(df["Date_Received"])
-    df["Last_Change_Date"] = pd.to_datetime(df["Last_Change_Date"])
-    df["QA_Status"] = df["QA_Status"].astype("category")
-    df["Log_Message"] = df["Log_Message"].astype("string")
+    df["QTY_KG"] = df["QTY_KG"].astype("float64")
+    df["QTY_LB"] = df["QTY_LB"].astype("float64")
+    df["LOCATION"] = df["LOCATION"].astype("category")
+    df["LOCATOR"] = df["LOCATOR"].astype("string")
+    df["DATE_RECEIVED"] = pd.to_datetime(df["DATE_RECEIVED"])
+    df["LAST_CHANGE_DATE"] = pd.to_datetime(df["LAST_CHANGE_DATE"])
+    df["QA_STATUS"] = df["QA_STATUS"].astype("category")
+    df["LOG_MESSAGE"] = df["LOG_MESSAGE"].astype("string")
     return df
 
 
 def set_proficient_dtypes(df):
+    """
+    Set the data types of columns in the dataframe
+
+    Parameters
+    ----------
+    df : DataFrame
+
+    Returns
+    -------
+    df : DataFrame
+
+    """
+
     df = df.fillna(0)
-    df["Part"] = df["Part"].astype("category")
-    df["Date"] = pd.to_datetime(df["Date"])
-    df["Lot"] = df["Lot"].astype("string")
-    df["Bag_Numbers"] = df["Bag_Numbers"].astype("int16")
+    df["PART"] = df["PART"].astype("category")
+    df["DATE"] = pd.to_datetime(df["DATE"])
+    df["LOT"] = df["LOT"].astype("string")
+    df["BAG_NUMBERS"] = df["BAG_NUMBERS"].astype("int16")
     return df
 
 
 def run_tab1(df_rm):
-    material = st.selectbox("Material", sorted(df_rm["Item_Description"].unique()))
+    """
+    Create tab for inventory breakdown
+
+    Parameters
+    ----------
+    df_rm : DataFrame
+
+    Returns
+    -------
+    material : str
+
+    """
+
+    material = st.selectbox("Material", sorted(df_rm["ITEM_DESCRIPTION"].unique()))
 
     status = st.multiselect(
         "Status",
-        sorted(df_rm["QA_Status"].unique()),
-        default=df_rm["QA_Status"].unique(),
+        sorted(df_rm["QA_STATUS"].unique()),
+        default=df_rm["QA_STATUS"].unique(),
     )
 
-    df_rm = df_rm.query("QA_Status in @status and Item_Description == @material").copy()
+    df_rm = df_rm.query("QA_STATUS in @status and ITEM_DESCRIPTION == @material").copy()
 
     path = (
         r"L:\Projects\Raw_Materials_Management_Review_Initiative"
@@ -233,33 +364,33 @@ def run_tab1(df_rm):
 
     log_message_key = pd.read_excel(path)
 
-    df_rm["Log_Message"] = df_rm["Log_Message"].str.lower()
+    df_rm["LOG_MESSAGE"] = df_rm["LOG_MESSAGE"].str.lower()
 
     df_rm = df_rm.merge(
         right=log_message_key,
-        left_on="Log_Message",
-        right_on="Log_Message",
+        left_on="LOG_MESSAGE",
+        right_on="LOG_MESSAGE",
         how="left",
     )
 
     df_rm_summary = (
-        df_rm.groupby(["Item_Description", "Alias"], as_index=False)
-        .agg({"LOT_NUMBER": "count", "Qty_kg": "sum"})
-        .rename(columns={"LOT_NUMBER": "Bag_Count", "Qty_kg": "Quantity_kg"})
-        .sort_values("Quantity_kg")
+        df_rm.groupby(["ITEM_DESCRIPTION", "ALIAS"], as_index=False)
+        .agg({"LOT_NUMBER": "count", "QTY_KG": "sum"})
+        .rename(columns={"LOT_NUMBER": "BAG_COUNT", "QTY_KG": "QUANTITY_KG"})
+        .sort_values("QUANTITY_KG")
     )
 
     sns.set_context("paper")
 
     fig = sns.catplot(
         data=df_rm_summary,
-        x="Alias",
-        y="Bag_Count",
+        x="ALIAS",
+        y="BAG_COUNT",
         kind="bar",
     )
 
     plt.title(material)
-    plt.xlabel("Log_Message")
+    plt.xlabel("LOG_MESSAGE")
     plt.xticks(rotation=90)
 
     ax = fig.facet_axis(0, 0)
@@ -295,9 +426,23 @@ def run_tab1(df_rm):
 
 
 def run_tab2(df_rm, df_prof):
+    """
+    Run tab for merging inventory with Proficient data
+
+    Parameters
+    ----------
+    df_rm : DataFrame
+    df_prof : DataFrame
+
+    Returns
+    -------
+    df_final : DataFrame
+
+    """
+
     color_labels, psd_labels, color_headers, psd_headers = find_headers(df_prof)
 
-    df_prof["Bag_Numbers"] = pd.to_numeric(df_prof["Bag_Numbers"], errors="coerce")
+    df_prof["BAG_NUMBERS"] = pd.to_numeric(df_prof["BAG_NUMBERS"], errors="coerce")
 
     df_color = clean_proficient_data(df_prof, color_headers)
     df_psd = clean_proficient_data(df_prof, psd_headers)
@@ -315,7 +460,7 @@ def run_tab2(df_rm, df_prof):
     )
 
     df_final = df_final.drop(
-        ["LOT_NUMBER", "PO_or_BOL_x", "Bag_Numbers_x", "PO_or_BOL_y", "Bag_Numbers_y"],
+        ["LOT_NUMBER", "PO_OR_BOL_x", "BAG_NUMBERS_x", "PO_or_BOL_y", "BAG_NUMBERS_y"],
         axis=1,
     )
 
@@ -336,13 +481,27 @@ def run_tab2(df_rm, df_prof):
 
 
 def run_tab3(df_final):
-    labels = ["Lot", "Bag", "Location", "Log_Message"]
+    """
+    Run tab for clustering data.
+
+    Parameters
+    ----------
+    df_final : DataFrame
+
+    Returns
+    -------
+    df_clusters : DataFrame
+    parameters : list(str)
+
+    """
+
+    labels = ["LOT", "BAG", "LOCATION", "LOG_MESSAGE"]
     material_type = st.selectbox("Material Type", ["Grit", "Powder"])
     test = st.selectbox("QA Test", ["Color", "PSD"])
     log_message = st.multiselect(
-        "Log_Message",
-        sorted(df_final["Log_Message"].unique()),
-        default=df_final["Log_Message"].unique(),
+        "LOG_MESSAGE",
+        sorted(df_final["LOG_MESSAGE"].unique()),
+        default=df_final["LOG_MESSAGE"].unique(),
     )
 
     set_max_dist_limit = st.checkbox("Set Max Distance Limit")
@@ -352,13 +511,13 @@ def run_tab3(df_final):
 
     if st.checkbox("Calculate", key=1):
 
-        df_clusters = df_final[df_final["Log_Message"].isin(log_message)].copy()
+        df_clusters = df_final[df_final["LOG_MESSAGE"].isin(log_message)].copy()
 
         final_labels = labels.copy()
 
         parameters = find_parameters(material_type, test)
 
-        final_labels.append(f"{test}_Result_Source")
+        final_labels.append(f"{test.str.upper()}_RESULT_SOURCE")
         final_labels.extend(parameters)
 
         df_clusters = df_clusters[final_labels].dropna()
@@ -388,13 +547,13 @@ def run_tab3(df_final):
                 cluster_centers = clustering.cluster_centers_
                 classes = clustering.labels_
 
-                df_clusters["Cluster"] = classes
+                df_clusters["CLUSTER"] = classes
                 for i, x in enumerate(parameters):
-                    df_clusters[f"Cluster_Center_{x}"] = [
+                    df_clusters[f"CLUSTER_CENTER_{x}"] = [
                         cluster_centers[j][i] for j in classes
                     ]
 
-                df_clusters["Distance_from_Cluster_Center"] = [
+                df_clusters["DISTANCE_FROM_CLUSTER_CENTER"] = [
                     distance.euclidean(
                         df_clusters[parameters].values.tolist()[i],
                         cluster_centers[j],
@@ -403,7 +562,7 @@ def run_tab3(df_final):
                 ]
 
                 max_dist_from_centroid = df_clusters[
-                    "Distance_from_Cluster_Center"
+                    "DISTANCE_FROM_CLUSTER_CENTER"
                 ].max()
                 number_of_clusters += 1
 
@@ -412,13 +571,13 @@ def run_tab3(df_final):
         cluster_centers = clustering.cluster_centers_
         classes = clustering.labels_
 
-        df_clusters["Cluster"] = classes
+        df_clusters["CLUSTER"] = classes
         for i, x in enumerate(parameters):
-            df_clusters[f"Cluster Center - {x}"] = [
+            df_clusters[f"CLUSTER_CENTER_{x}"] = [
                 cluster_centers[j][i] for j in classes
             ]
 
-        df_clusters["Distance_from_Cluster_Center"] = [
+        df_clusters["DISTANCE_FROM_CLUSTER_CENTER"] = [
             distance.euclidean(
                 df_clusters[parameters].values.tolist()[i],
                 cluster_centers[j],
@@ -426,27 +585,27 @@ def run_tab3(df_final):
             for i, j in enumerate(classes)
         ]
 
-        plot_args = {"x": "Cluster", "y": "size", "kind": "bar"}
+        plot_args = {"x": "CLUSTER", "y": "size", "kind": "bar"}
 
         if test == "Color":
-            df_clusters["Within_Limit"] = (
-                df_clusters["Distance_from_Cluster_Center"] <= 0.50
+            df_clusters["WITHIN_LIMIT"] = (
+                df_clusters["DISTANCE_FROM_CLUSTER_CENTER"] <= 0.50
             )
 
-            plot_args["hue"] = "Within_Limit"
+            plot_args["hue"] = "WITHIN_LIMIT"
             plot_args["hue_order"] = [True, False]
             plot_args["palette"] = ["C2", "C3"]
 
             cluster_counts = df_clusters.groupby(
-                ["Cluster", "Within_Limit"], as_index=False
+                ["CLUSTER", "WITHIN_LIMIT"], as_index=False
             ).size()
 
         else:
-            cluster_counts = df_clusters.groupby("Cluster", as_index=False).size()
+            cluster_counts = df_clusters.groupby("CLUSTER", as_index=False).size()
 
         plot_args["data"] = cluster_counts
 
-        st.metric("Clusters", len(df_clusters["Cluster"].unique()))
+        st.metric("Clusters", len(df_clusters["CLUSTER"].unique()))
 
         fig = sns.catplot(**plot_args)
 
@@ -479,6 +638,21 @@ def run_tab3(df_final):
 
 
 def run_tab4(df_clusters, parameters, material):
+    """
+    Run tab to make 3D plot of clusters.
+
+    Parameters
+    ----------
+    df_clusters : DataFrame
+    parameters : list(str)
+    material : str
+
+    Returns
+    -------
+    None.
+
+    """
+
     x = st.selectbox("X", parameters, index=0)
     y = st.selectbox("Y", parameters, index=1)
     z = st.selectbox("Z", parameters, index=2)
@@ -488,7 +662,7 @@ def run_tab4(df_clusters, parameters, material):
         x=x,
         y=y,
         z=z,
-        color="Cluster",
+        color="CLUSTER",
         title=material,
     )
 
@@ -561,15 +735,16 @@ def run_tab4(df_clusters, parameters, material):
     if st.checkbox("Calculate", key=2):
         st.plotly_chart(fig, theme="streamlit")
 
-        # download_plot = st.button("Download plot as HTML")
-        # if download_plot:
-        #     now = dt.datetime.now().strftime("%y%m%d")
-        #     output = f"ClustersPlot.{now}.html"
-        #     output = uniquify(output)
-        #     plotly.offline.plot(fig, filename=output)
-
 
 def main():
+    """
+    Main gui
+
+    Returns
+    -------
+    None.
+
+    """
 
     path1 = st.sidebar.file_uploader(
         "Upload RM Inventory data", type="csv", accept_multiple_files=False
@@ -603,7 +778,7 @@ def main():
     with tab2:
         if path1 and path_3:
             df_prof = pd.read_csv(
-                path_3, sep="\t", parse_dates=["Date"], quoting=csv.QUOTE_NONE
+                path_3, sep="\t", parse_dates=["DATE"], quoting=csv.QUOTE_NONE
             )
 
             df_prof = format_headers(df_prof)
