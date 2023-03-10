@@ -14,7 +14,7 @@ from sklearn.cluster import KMeans
 import streamlit as st
 
 
-@st.cache
+@st.cache_data
 def convert_df(df: pd.DataFrame):
     """
     Convert df to csv and encode to be able to download.
@@ -83,9 +83,9 @@ def find_headers(df):
                 "30_MICRON_CAMBRIA_MICROTRAC",
                 "10_MICRON_CAMBRIA_MICROTRAC",
                 "2_MICRON_CAMBRIA_MICROTRAC",
-                "D10_Cambria_Microtrac",
-                "D50_Cambria_Microtrac",
-                "D90_Cambria_Microtrac",
+                "D10_CAMBRIA_MICROTRAC",
+                "D50_CAMBRIA_MICROTRAC",
+                "D90_CAMBRIA_MICROTRAC",
             ]
     elif "L_AVERAGE" in df.columns:
         color_labels = ["L_AVERAGE", "A_AVERAGE", "B_AVERAGE"]
@@ -97,12 +97,12 @@ def find_headers(df):
             "30_MICRON_CAMBRIA_MICROTRAC",
             "10_MICRON_CAMBRIA_MICROTRAC",
             "2_MICRON_CAMBRIA_MICROTRAC",
-            "D10_Cambria_Microtrac",
-            "D50_Cambria_Microtrac",
-            "D90_Cambria_Microtrac",
+            "D10_CAMBRIA_MICROTRAC",
+            "D50_CAMBRIA_MICROTRAC",
+            "D90_CAMBRIA_MICROTRAC",
         ]
 
-    base_headers = ["LOT", "BAG_NUMBERS", "PO_or_BOL"]
+    base_headers = ["LOT", "BAG_NUMBERS", "PO_OR_BOL"]
 
     color_headers = base_headers.copy()
     color_headers.extend(color_labels)
@@ -272,8 +272,8 @@ def merge_tests_and_averages(df_rm, df_prof, df_blanks, labels, test):
         right_on=["LOT", "BAG_NUMBERS"],
         how="left",
     )
-    df_merged[f"{test.str.upper()}_RESULT_SOURCE"] = "Calculated"
-    df_merged.loc[df_merged[labels[0]].notna(), f"{test.str.upper()}_RESULT_SOURCE"] = "Tested"
+    df_merged[f"{test.upper()}_RESULT_SOURCE"] = "Calculated"
+    df_merged.loc[df_merged[labels[0]].notna(), f"{test.upper()}_RESULT_SOURCE"] = "Tested"
     df_merged.update(df_blanks, overwrite=False)
 
     return df_merged
@@ -460,7 +460,7 @@ def run_tab2(df_rm, df_prof):
     )
 
     df_final = df_final.drop(
-        ["LOT_NUMBER", "PO_OR_BOL_x", "BAG_NUMBERS_x", "PO_or_BOL_y", "BAG_NUMBERS_y"],
+        ["LOT_NUMBER", "PO_OR_BOL_x", "BAG_NUMBERS_x", "PO_OR_BOL_y", "BAG_NUMBERS_y"],
         axis=1,
     )
 
@@ -517,7 +517,7 @@ def run_tab3(df_final):
 
         parameters = find_parameters(material_type, test)
 
-        final_labels.append(f"{test.str.upper()}_RESULT_SOURCE")
+        final_labels.append(f"{test.upper()}_RESULT_SOURCE")
         final_labels.extend(parameters)
 
         df_clusters = df_clusters[final_labels].dropna()
@@ -778,7 +778,7 @@ def main():
     with tab2:
         if path1 and path_3:
             df_prof = pd.read_csv(
-                path_3, sep="\t", parse_dates=["DATE"], quoting=csv.QUOTE_NONE
+                path_3, sep="\t", parse_dates=["Date"], quoting=csv.QUOTE_NONE
             )
 
             df_prof = format_headers(df_prof)
