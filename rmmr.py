@@ -150,37 +150,6 @@ def find_parameters(material_type, test):
     return parameters
 
 
-def add_value_labels(ax, spacing=5):
-    """Add labels to the end of each bar in a bar chart.
-
-    Arguments:
-        ax (matplotlib.axes.Axes): The matplotlib object containing the axes
-            of the plot to annotate.
-        spacing (int): The distance between the labels and the bars.
-    """
-    for rect in ax.patches:
-        y_value = rect.get_height()
-        x_value = rect.get_x() + rect.get_width() / 2
-
-        space = spacing
-        va = "bottom"
-
-        if y_value < 0:
-            space *= -1
-            va = "top"
-
-        label = "{:.1f}".format(y_value)
-
-        ax.annotate(
-            label,
-            (x_value, y_value),
-            xytext=(0, space),
-            textcoords="offset points",
-            ha="center",
-            va=va,
-        )
-
-
 def format_headers(df):
     """
     Replace spaces with underscores and capitalize the column headers
@@ -333,99 +302,7 @@ def set_proficient_dtypes(df):
     return df
 
 
-def run_tab1(df_rm):
-    """
-    Create tab for inventory breakdown
-
-    Parameters
-    ----------
-    df_rm : DataFrame
-
-    Returns
-    -------
-    material : str
-
-    """
-
-    material = st.selectbox("Material", sorted(df_rm["ITEM_DESCRIPTION"].unique()))
-
-    status = st.multiselect(
-        "Status",
-        sorted(df_rm["QA_STATUS"].unique()),
-        default=df_rm["QA_STATUS"].unique(),
-    )
-
-    df_rm = df_rm.query("QA_STATUS in @status and ITEM_DESCRIPTION == @material").copy()
-
-    path = (
-        r"L:\Projects\Raw_Materials_Management_Review_Initiative"
-        + r"\General\Mgmt Review Log Message Key.xlsx"
-    )
-
-    log_message_key = pd.read_excel(path)
-
-    df_rm["LOG_MESSAGE"] = df_rm["LOG_MESSAGE"].str.lower()
-
-    df_rm = df_rm.merge(
-        right=log_message_key,
-        left_on="LOG_MESSAGE",
-        right_on="LOG_MESSAGE",
-        how="left",
-    )
-
-    df_rm_summary = (
-        df_rm.groupby(["ITEM_DESCRIPTION", "ALIAS"], as_index=False)
-        .agg({"LOT_NUMBER": "count", "QTY_KG": "sum"})
-        .rename(columns={"LOT_NUMBER": "BAG_COUNT", "QTY_KG": "QUANTITY_KG"})
-        .sort_values("QUANTITY_KG")
-    )
-
-    sns.set_context("paper")
-
-    fig = sns.catplot(
-        data=df_rm_summary,
-        x="ALIAS",
-        y="BAG_COUNT",
-        kind="bar",
-    )
-
-    plt.title(material)
-    plt.xlabel("LOG_MESSAGE")
-    plt.xticks(rotation=90)
-
-    ax = fig.facet_axis(0, 0)
-    for p in ax.patches:
-        ax.text(
-            p.get_x() + p.get_width() / 2,
-            p.get_height() + p.get_width() / 2,
-            "{0:.0f}".format(p.get_height()),
-            color="black",
-            rotation="horizontal",
-            size="large",
-            ha="center",
-        )
-
-    plt.tight_layout()
-
-    st.pyplot(fig)
-
-    now = dt.datetime.now().strftime("%y%m%d")
-    output = uniquify(f"InventoryPlot.{material}.{now}.png")
-
-    img = BytesIO()
-    plt.savefig(img, format="png")
-
-    st.download_button(
-        label="Download plot as png",
-        data=img,
-        file_name=output,
-        mime="image/png",
-    )
-
-    return material
-
-
-def run_tab2(df_rm, df_prof):
+def run_tab1(df_rm, df_prof):
     """
     Run tab for merging inventory with Proficient data
 
@@ -436,7 +313,7 @@ def run_tab2(df_rm, df_prof):
 
     Returns
     -------
-    df_final : DataFrame
+    df_merged : DataFrame
 
     """
 
@@ -452,14 +329,14 @@ def run_tab2(df_rm, df_prof):
     )
     df_prof_psd_fill_blanks = calc_lot_averages(df_rm, df_psd, psd_headers, psd_labels)
 
-    df_final = merge_tests_and_averages(
+    df_merged = merge_tests_and_averages(
         df_rm, df_color, df_prof_color_fill_blanks, color_labels, "Color"
     )
-    df_final = merge_tests_and_averages(
-        df_final, df_psd, df_prof_psd_fill_blanks, psd_labels, "PSD"
+    df_merged = merge_tests_and_averages(
+        df_merged, df_psd, df_prof_psd_fill_blanks, psd_labels, "PSD"
     )
 
-    df_final = df_final.drop(
+    df_merged = df_merged.drop(
         ["LOT_NUMBER", "PO_OR_BOL_x", "BAG_NUMBERS_x", "PO_OR_BOL_y", "BAG_NUMBERS_y"],
         axis=1,
     )
@@ -468,274 +345,30 @@ def run_tab2(df_rm, df_prof):
     output = f"PROFxINV.{now}.csv"
     output = uniquify(output)
 
-    st.dataframe(df_final)
+    st.dataframe(df_merged)
 
     st.download_button(
         label="Download data as CSV",
-        data=convert_df(df_final),
+        data=convert_df(df_merged),
         file_name=output,
         mime="text/csv",
     )
 
-    return df_final
+    return df_merged
 
 
-def run_tab3(df_final):
-    """
-    Run tab for clustering data.
-
-    Parameters
-    ----------
-    df_final : DataFrame
-
-    Returns
-    -------
-    df_clusters : DataFrame
-    parameters : list(str)
-
-    """
-
-    labels = ["LOT", "BAG", "LOCATION", "LOG_MESSAGE"]
+def run_tab2(df):
     material_type = st.selectbox("Material Type", ["Grit", "Powder"])
     test = st.selectbox("QA Test", ["Color", "PSD"])
-    log_message = st.multiselect(
-        "LOG_MESSAGE",
-        sorted(df_final["LOG_MESSAGE"].unique()),
-        default=df_final["LOG_MESSAGE"].unique(),
-    )
-
-    set_max_dist_limit = st.checkbox("Set Max Distance Limit")
-
-    if set_max_dist_limit:
-        max_dist_limit = st.number_input("Max Distance", value=0.5)
-
-    if st.checkbox("Calculate", key=1):
-
-        df_clusters = df_final[df_final["LOG_MESSAGE"].isin(log_message)].copy()
-
-        final_labels = labels.copy()
-
-        parameters = find_parameters(material_type, test)
-
-        final_labels.append(f"{test.upper()}_RESULT_SOURCE")
-        final_labels.extend(parameters)
-
-        df_clusters = df_clusters[final_labels].dropna()
-        test_df = df_clusters[parameters]
-
-        inertias = []
-        for i in range(1, 11):
-            kmeans = KMeans(n_clusters=i, n_init="auto")
-            kmeans.fit(test_df)
-            inertias.append(kmeans.inertia_)
-
-        number_of_clusters = KneeLocator(
-            range(1, 11),
-            inertias,
-            curve="convex",
-            direction="decreasing",
-        ).elbow
-
-        max_dist_from_centroid = 100
-        if set_max_dist_limit:
-            while max_dist_from_centroid > max_dist_limit:
-
-                clustering = KMeans(n_clusters=number_of_clusters, n_init="auto").fit(
-                    test_df
-                )
-
-                cluster_centers = clustering.cluster_centers_
-                classes = clustering.labels_
-
-                df_clusters["CLUSTER"] = classes
-                for i, x in enumerate(parameters):
-                    df_clusters[f"CLUSTER_CENTER_{x}"] = [
-                        cluster_centers[j][i] for j in classes
-                    ]
-
-                df_clusters["DISTANCE_FROM_CLUSTER_CENTER"] = [
-                    distance.euclidean(
-                        df_clusters[parameters].values.tolist()[i],
-                        cluster_centers[j],
-                    )
-                    for i, j in enumerate(classes)
-                ]
-
-                max_dist_from_centroid = df_clusters[
-                    "DISTANCE_FROM_CLUSTER_CENTER"
-                ].max()
-                number_of_clusters += 1
-
-        clustering = KMeans(n_clusters=number_of_clusters, n_init="auto").fit(test_df)
-
-        cluster_centers = clustering.cluster_centers_
-        classes = clustering.labels_
-
-        df_clusters["CLUSTER"] = classes
-        for i, x in enumerate(parameters):
-            df_clusters[f"CLUSTER_CENTER_{x}"] = [
-                cluster_centers[j][i] for j in classes
-            ]
-
-        df_clusters["DISTANCE_FROM_CLUSTER_CENTER"] = [
-            distance.euclidean(
-                df_clusters[parameters].values.tolist()[i],
-                cluster_centers[j],
-            )
-            for i, j in enumerate(classes)
-        ]
-
-        plot_args = {"x": "CLUSTER", "y": "size", "kind": "bar"}
-
-        if test == "Color":
-            df_clusters["WITHIN_LIMIT"] = (
-                df_clusters["DISTANCE_FROM_CLUSTER_CENTER"] <= 0.50
-            )
-
-            plot_args["hue"] = "WITHIN_LIMIT"
-            plot_args["hue_order"] = [True, False]
-            plot_args["palette"] = ["C2", "C3"]
-
-            cluster_counts = df_clusters.groupby(
-                ["CLUSTER", "WITHIN_LIMIT"], as_index=False
-            ).size()
-
-        else:
-            cluster_counts = df_clusters.groupby("CLUSTER", as_index=False).size()
-
-        plot_args["data"] = cluster_counts
-
-        st.metric("Clusters", len(df_clusters["CLUSTER"].unique()))
-
-        fig = sns.catplot(**plot_args)
-
-        ax = fig.facet_axis(0, 0)
-        for p in ax.patches:
-            ax.text(
-                p.get_x() + p.get_width() / 2,
-                p.get_height() + p.get_width() / 2,
-                "{0:.0f}".format(p.get_height()),
-                color="black",
-                rotation="horizontal",
-                size="large",
-                ha="center",
-            )
-
-        st.pyplot(fig)
-
-        now = dt.datetime.now().strftime("%y%m%d")
-        output = f"Clusters.{now}.csv"
-        output = uniquify(output)
-
-        st.download_button(
-            label="Download data as CSV",
-            data=convert_df(df_clusters),
-            file_name=output,
-            mime="text/csv",
+    
+    parameters = find_parameters(material_type, test)
+    
+    spec_table = pd.DataFrame(
+        {"parameter": parameters, "low": [], "high": []}
         )
-
-    return df_clusters, parameters
-
-
-def run_tab4(df_clusters, parameters, material):
-    """
-    Run tab to make 3D plot of clusters.
-
-    Parameters
-    ----------
-    df_clusters : DataFrame
-    parameters : list(str)
-    material : str
-
-    Returns
-    -------
-    None.
-
-    """
-
-    x = st.selectbox("X", parameters, index=0)
-    y = st.selectbox("Y", parameters, index=1)
-    z = st.selectbox("Z", parameters, index=2)
-
-    fig = px.scatter_3d(
-        data_frame=df_clusters,
-        x=x,
-        y=y,
-        z=z,
-        color="CLUSTER",
-        title=material,
-    )
-
-    make_spec_box = st.checkbox("Specification Box")
-    if make_spec_box:
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.subheader(f"{x}")
-            x_specs = [
-                st.number_input(label="Upper", key=f"{x} Upper"),
-                st.number_input(label="Lower", key=f"{x} Lower"),
-            ]
-        with col2:
-            st.subheader(f"{y}")
-            y_specs = [
-                st.number_input(label="Upper", key=f"{y} Upper"),
-                st.number_input(label="Lower", key=f"{y} Lower"),
-            ]
-        with col3:
-            st.subheader(f"{z}")
-            z_specs = [
-                st.number_input(label="Upper", key=f"{z} Upper"),
-                st.number_input(label="Lower", key=f"{z} Lower"),
-            ]
-
-        cube_data = {
-            "x": [
-                x_specs[0],
-                x_specs[1],
-                x_specs[0],
-                x_specs[1],
-                x_specs[0],
-                x_specs[1],
-                x_specs[0],
-                x_specs[1],
-            ],
-            "y": [
-                y_specs[1],
-                y_specs[1],
-                y_specs[0],
-                y_specs[0],
-                y_specs[1],
-                y_specs[1],
-                y_specs[0],
-                y_specs[0],
-            ],
-            "z": [
-                z_specs[1],
-                z_specs[1],
-                z_specs[1],
-                z_specs[1],
-                z_specs[0],
-                z_specs[0],
-                z_specs[0],
-                z_specs[0],
-            ],
-            "opacity": 0.1,
-            "color": "green",
-            "alphahull": 1,
-            "hoverinfo": "skip",
-            "name": "Spec Limit",
-            "hovertemplate": "b=%{x:.2f}<br>" + "a=%{y:.2f}<br>" + "L=%{z:.2f}",
-        }
-
-        fig.add_trace(go.Mesh3d(cube_data))
-
-    fig.update_scenes(xaxis_autorange="reversed")
-
-    if st.checkbox("Calculate", key=2):
-        st.plotly_chart(fig, theme="streamlit")
-
-
+    
+    edited_spec_table = st.experimental_data_editor(spec_table)
+    
 def main():
     """
     Main gui
@@ -750,78 +383,42 @@ def main():
         "Upload RM Inventory data", type="csv", accept_multiple_files=False
     )
 
-    path_3 = st.sidebar.file_uploader(
+    path2 = st.sidebar.file_uploader(
         "Upload Proficient data", type="txt", accept_multiple_files=False
     )
 
     tab_names = [
-        "Status-Reason Breakdown",
         "Proficient & Inventory Merger",
-        "Data Clustering",
-        "3D Plotting of Cluster",
+        "Ideal Samples"
     ]
 
-    tab1, tab2, tab3, tab4 = st.tabs(tab_names)
+    tab1, tab2 = st.tabs(tab_names)
 
     with tab1:
-        if path1:
+        if path1 and path2:
+            df_rm = format_headers(pd.read_csv(path1, thousands=","))
+            
+            df_prof = format_headers(pd.read_csv(
+                path2, sep="\t", parse_dates=["Date"], quoting=csv.QUOTE_NONE
+            ))
 
-            df_rm = pd.read_csv(path1, thousands=",")
+            df_merged = run_tab1(df_rm, df_prof)
 
-            df_rm = format_headers(df_rm)
-
-            material = run_tab1(df_rm)
-
-        elif not path_3:
+        elif not path1 and not path2:
+            st.warning("Upload RM Inventory and Proficient data.")
+        elif not path1:
             st.warning("Upload RM Inventory data.")
-
+        elif not path2:
+            st.warning("Upload Proficient data.")
     with tab2:
-        if path1 and path_3:
-            df_prof = pd.read_csv(
-                path_3, sep="\t", parse_dates=["Date"], quoting=csv.QUOTE_NONE
-            )
+        if path1 and path2:
+            run_tab1(df_merged)
 
-            df_prof = format_headers(df_prof)
-
-            df_final = run_tab2(df_rm, df_prof)
-
-        elif not path1 and not path_3:
+        elif not path1 and not path2:
             st.warning("Upload RM Inventory and Proficient data.")
         elif not path1:
             st.warning("Upload RM Inventory data.")
-        elif not path_3:
-            st.warning("Upload Proficient data.")
-
-    with tab3:
-        if path1 and path_3:
-            try:
-                df_clusters, parameters = run_tab3(df_final)
-
-            except Exception as e:
-                st.error(e)
-
-        elif not path1 and not path_3:
-            st.warning("Upload RM Inventory and Proficient data.")
-
-        elif not path1:
-            st.warning("Upload RM Inventory data.")
-
-        elif not path_3:
-            st.warning("Upload Proficient data.")
-
-    with tab4:
-        if path1 and path_3:
-            try:
-                run_tab4(df_clusters, parameters, material)
-
-            except Exception as e:
-                st.error(e)
-
-        elif not path1 and not path_3:
-            st.warning("Upload RM Inventory and Proficient data.")
-        elif not path1:
-            st.warning("Upload RM Inventory data.")
-        elif not path_3:
+        elif not path2:
             st.warning("Upload Proficient data.")
 
 
