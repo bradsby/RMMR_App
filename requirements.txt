@@ -1,3 +1,3 @@
-deltaE @ git+https://github.com/bradsby/deltaE.git
+delta_E @ git+https://github.com/bradsby/deltaE.git
 pandas>=1.5.3
 streamlit>=1.20.0
