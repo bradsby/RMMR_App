@@ -1,16 +1,9 @@
+import csv
 import datetime as dt
-from io import BytesIO
 import os
 
-import csv
-from kneed import KneeLocator
-import matplotlib.pyplot as plt
+import delta_E
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from scipy.spatial import distance
-import seaborn as sns
-from sklearn.cluster import KMeans
 import streamlit as st
 
 
@@ -66,7 +59,7 @@ def find_headers(df):
     Returns
     -------
     color_labels : list(str)
-    psd_labels : list(str)  
+    psd_labels : list(str)
     color_headers : list(str)
     psd_headers : list(str)
 
@@ -242,7 +235,9 @@ def merge_tests_and_averages(df_rm, df_prof, df_blanks, labels, test):
         how="left",
     )
     df_merged[f"{test.upper()}_RESULT_SOURCE"] = "Calculated"
-    df_merged.loc[df_merged[labels[0]].notna(), f"{test.upper()}_RESULT_SOURCE"] = "Tested"
+    df_merged.loc[
+        df_merged[labels[0]].notna(), f"{test.upper()}_RESULT_SOURCE"
+    ] = "Tested"
     df_merged.update(df_blanks, overwrite=False)
 
     return df_merged
@@ -261,7 +256,7 @@ def set_inventory_dtypes(df):
     df : DataFrame
 
     """
-    
+
     df = df.fillna(0)
     df["PHYSICAL_FORMAT"] = df["PHYSICAL_FORMAT"].astype("category")
     df["ITEM_DESCRIPTION"] = df["ITEM_DESCRIPTION"].astype("category")
@@ -359,16 +354,83 @@ def run_tab1(df_rm, df_prof):
 
 def run_tab2(df):
     material_type = st.selectbox("Material Type", ["Grit", "Powder"])
-    test = st.selectbox("QA Test", ["Color", "PSD"])
-    
+    test = "Color"  # st.selectbox("QA Test", ["Color", "PSD"])
+    number_of_options = st.number_input(label="Number of Options", min_value=1, value=5)
+
     parameters = find_parameters(material_type, test)
-    
+
+    n = len(parameters)
     spec_table = pd.DataFrame(
-        {"parameter": parameters, "low": [], "high": []}
-        )
-    
-    edited_spec_table = st.experimental_data_editor(spec_table)
-    
+        {
+            "Parameter": parameters,
+            "Low_Spec": [None] * n,
+            "High_Spec": [None] * n,
+            "Find_Low": [False] * n,
+            "Find_High": [False] * n,
+        }
+    ).set_index("Parameter")
+
+    edited_table = st.experimental_data_editor(spec_table)
+
+    edited_table["Low_Spec"] = pd.to_numeric(edited_table["Low_Spec"])
+    edited_table["High_Spec"] = pd.to_numeric(edited_table["High_Spec"])
+    edited_table["Average_Spec"] = edited_table[["Low_Spec", "High_Spec"]].mean(axis=1)
+
+    specs = edited_table.to_dict()
+    df_samples = pd.DataFrame()
+    center = edited_table["Average_Spec"].to_list()
+    for idx, parameter in enumerate(parameters):
+        for bound in ["Low", "High"]:
+            if specs[f"Find_{bound}"][parameter]:
+                df_temp = df[
+                    (df[parameters[0]].notna())
+                    & (df["COLOR_RESULT_SOURCE"] == "Tested")
+                ].copy()
+                target = center.copy()
+                target[idx] = specs[f"{bound}_Spec"][parameter]
+                df_temp["dE"] = df_temp.apply(
+                    lambda x: delta_E.dE00(
+                        x[parameters[0]],
+                        x[parameters[1]],
+                        x[parameters[2]],
+                        target[0],
+                        target[1],
+                        target[2],
+                    ),
+                    axis=1,
+                )
+                df_temp["TARGET_L"] = target[0]
+                df_temp["TARGET_A"] = target[1]
+                df_temp["TARGET_B"] = target[2]
+                
+                df_temp = df_temp.sort_values("dE", ascending=True).head(
+                    number_of_options
+                )
+                df_temp["REASON"] = f"{bound.upper()}_{parameter}"
+                df_samples = pd.concat([df_samples, df_temp])
+
+    df_samples = df_samples[
+        [
+            "ITEM_DESCRIPTION",
+            "ITEM",
+            "LOT",
+            "BAG",
+            "LOCATION",
+            "QA_STATUS",
+            "LOG_MESSAGE",
+            parameters[0],
+            parameters[1],
+            parameters[2],
+            "TARGET_L",
+            "TARGET_A",
+            "TARGET_B",
+            "dE",
+            "REASON",
+        ]
+    ]
+    st.dataframe(df_samples, use_container_width=True)
+
+
 def main():
     """
     Main gui
@@ -387,20 +449,19 @@ def main():
         "Upload Proficient data", type="txt", accept_multiple_files=False
     )
 
-    tab_names = [
-        "Proficient & Inventory Merger",
-        "Ideal Samples"
-    ]
+    tab_names = ["Proficient & Inventory Merger", "Ideal Samples"]
 
     tab1, tab2 = st.tabs(tab_names)
 
     with tab1:
         if path1 and path2:
             df_rm = format_headers(pd.read_csv(path1, thousands=","))
-            
-            df_prof = format_headers(pd.read_csv(
-                path2, sep="\t", parse_dates=["Date"], quoting=csv.QUOTE_NONE
-            ))
+
+            df_prof = format_headers(
+                pd.read_csv(
+                    path2, sep="\t", parse_dates=["Date"], quoting=csv.QUOTE_NONE
+                )
+            )
 
             df_merged = run_tab1(df_rm, df_prof)
 
@@ -412,7 +473,7 @@ def main():
             st.warning("Upload Proficient data.")
     with tab2:
         if path1 and path2:
-            run_tab1(df_merged)
+            run_tab2(df_merged)
 
         elif not path1 and not path2:
             st.warning("Upload RM Inventory and Proficient data.")
