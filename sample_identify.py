@@ -376,60 +376,62 @@ def run_tab2(df):
     edited_table["High_Spec"] = pd.to_numeric(edited_table["High_Spec"])
     edited_table["Average_Spec"] = edited_table[["Low_Spec", "High_Spec"]].mean(axis=1)
 
-    specs = edited_table.to_dict()
-    df_samples = pd.DataFrame()
-    center = edited_table["Average_Spec"].to_list()
-    for idx, parameter in enumerate(parameters):
-        for bound in ["Low", "High"]:
-            if specs[f"Find_{bound}"][parameter]:
-                df_temp = df[
-                    (df[parameters[0]].notna())
-                    & (df["COLOR_RESULT_SOURCE"] == "Tested")
-                ].copy()
-                target = center.copy()
-                target[idx] = specs[f"{bound}_Spec"][parameter]
-                df_temp["dE"] = df_temp.apply(
-                    lambda x: delta_E.dE00(
-                        x[parameters[0]],
-                        x[parameters[1]],
-                        x[parameters[2]],
-                        target[0],
-                        target[1],
-                        target[2],
-                    ),
-                    axis=1,
-                )
-                df_temp["TARGET_L"] = target[0]
-                df_temp["TARGET_A"] = target[1]
-                df_temp["TARGET_B"] = target[2]
-                
-                df_temp = df_temp.sort_values("dE", ascending=True).head(
-                    number_of_options
-                )
-                df_temp["REASON"] = f"{bound.upper()}_{parameter}"
-                df_samples = pd.concat([df_samples, df_temp])
+    try:
+        specs = edited_table.to_dict()
+        df_samples = pd.DataFrame()
+        center = edited_table["Average_Spec"].to_list()
+        for idx, parameter in enumerate(parameters):
+            for bound in ["Low", "High"]:
+                if specs[f"Find_{bound}"][parameter]:
+                    df_temp = df[
+                        (df[parameters[0]].notna())
+                        & (df["COLOR_RESULT_SOURCE"] == "Tested")
+                    ].copy()
+                    target = center.copy()
+                    target[idx] = specs[f"{bound}_Spec"][parameter]
+                    df_temp["dE"] = df_temp.apply(
+                        lambda x: delta_E.dE00(
+                            x[parameters[0]],
+                            x[parameters[1]],
+                            x[parameters[2]],
+                            target[0],
+                            target[1],
+                            target[2],
+                        ),
+                        axis=1,
+                    )
+                    df_temp["TARGET_L"] = target[0]
+                    df_temp["TARGET_A"] = target[1]
+                    df_temp["TARGET_B"] = target[2]
+                    
+                    df_temp = df_temp.sort_values("dE", ascending=True).head(
+                        number_of_options
+                    )
+                    df_temp["REASON"] = f"{bound.upper()}_{parameter}"
+                    df_samples = pd.concat([df_samples, df_temp])
 
-    df_samples = df_samples[
-        [
-            "ITEM_DESCRIPTION",
-            "ITEM",
-            "LOT",
-            "BAG",
-            "LOCATION",
-            "QA_STATUS",
-            "LOG_MESSAGE",
-            parameters[0],
-            parameters[1],
-            parameters[2],
-            "TARGET_L",
-            "TARGET_A",
-            "TARGET_B",
-            "dE",
-            "REASON",
+        df_samples = df_samples[
+            [
+                "ITEM_DESCRIPTION",
+                "ITEM",
+                "LOT",
+                "BAG",
+                "LOCATION",
+                "QA_STATUS",
+                "LOG_MESSAGE",
+                parameters[0],
+                parameters[1],
+                parameters[2],
+                "TARGET_L",
+                "TARGET_A",
+                "TARGET_B",
+                "dE",
+                "REASON",
+            ]
         ]
-    ]
-    st.dataframe(df_samples, use_container_width=True)
-
+        st.dataframe(df_samples, use_container_width=True)
+    except KeyError:
+        st.warning("Please select target specification(s).")
 
 def main():
     """
