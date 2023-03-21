@@ -6,6 +6,11 @@ import delta_E
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(
+    page_title="Sample Identify",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 @st.cache_data
 def convert_df(df: pd.DataFrame):
