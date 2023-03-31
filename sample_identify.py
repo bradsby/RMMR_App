@@ -8,43 +8,18 @@ import streamlit as st
 
 st.set_page_config(
     page_title="Sample Identify",
-    page_icon='🔎',
+    page_icon="🔎",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
+
 @st.cache_data
 def convert_df(df: pd.DataFrame):
-    """
-    Convert df to csv and encode to be able to download.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-
-    Returns
-    -------
-    Encoded dataframe for downloading.
-
-    """
     return df.to_csv()
 
 
 def uniquify(path: str) -> str:
-    """
-    Check path for existing file. If file exists, increase counter in file
-    path by 1 until file does not already exist.
-
-    Parameters
-    ----------
-    path : str
-
-    Returns
-    -------
-    path : str
-        Updated with new counter.
-
-    """
     filename, extension = os.path.splitext(path)
     counter = 1
     path = f"{filename}.{str(counter)}{extension}"
@@ -55,22 +30,6 @@ def uniquify(path: str) -> str:
 
 
 def find_headers(df):
-    """
-    Determine the proper color and PSD headers in Proficient
-
-    Parameters
-    ----------
-    df : DataFrame
-
-    Returns
-    -------
-    color_labels : list(str)
-    psd_labels : list(str)
-    color_headers : list(str)
-    psd_headers : list(str)
-
-    """
-
     if ("L_AVERAGE" in df.columns) and ("L_AVERAGE_WET" in df.columns):
         if df["L_AVERAGE"].isna().sum() <= df["L_AVERAGE_WET"].isna().sum():
             color_labels = ["L_AVERAGE", "A_AVERAGE", "B_AVERAGE"]
@@ -113,21 +72,6 @@ def find_headers(df):
 
 
 def find_parameters(material_type, test):
-    """
-    Determine proper parameters based on material type (Grit or Powder) and test type
-    (Color or PSD)
-
-    Parameters
-    ----------
-    material_type : str
-    test : str
-
-    Returns
-    -------
-    parameters : list(str)
-
-    """
-
     if material_type == "Grit" and test == "Color":
         parameters = ["L_AVERAGE", "A_AVERAGE", "B_AVERAGE"]
     elif material_type == "Grit" and test == "PSD":
@@ -150,58 +94,15 @@ def find_parameters(material_type, test):
 
 
 def format_headers(df):
-    """
-    Replace spaces with underscores and capitalize the column headers
-
-    Parameters
-    ----------
-    df : DataFrame
-
-    Returns
-    -------
-    df : DataFrame
-
-    """
-
     df.columns = df.columns.str.replace(" ", "_").str.upper()
     return df
 
 
 def clean_proficient_data(df, headers):
-    """
-    Remove duplicate tests from specified columns.
-
-    Parameters
-    ----------
-    df : DataFrame
-    headers : list(str)
-
-    Returns
-    -------
-    DataFrame
-
-    """
-
     return df[headers].dropna().drop_duplicates(["LOT", "BAG_NUMBERS"])
 
 
 def calc_lot_averages(df_rm, df_prof, headers, labels):
-    """
-    Create dataframe of lot averages for each label.
-
-    Parameters
-    ----------
-    df_rm : DataFrame
-    df_prof : DataFrame
-    headers : list(str)
-    labels : list(str)
-
-    Returns
-    -------
-    df_fill_blanks : DataFrame
-
-    """
-
     df_lot_avgs = df_prof.groupby("LOT")[labels].mean()
 
     df_fill_blanks = df_rm.merge(
@@ -216,24 +117,6 @@ def calc_lot_averages(df_rm, df_prof, headers, labels):
 
 
 def merge_tests_and_averages(df_rm, df_prof, df_blanks, labels, test):
-    """
-    Merge dataframe with test results and update with dataframe with averages to fill in
-    blank values.
-
-    Parameters
-    ----------
-    df_rm : DataFrame
-    df_prof : DataFrame
-    df_blanks : DataFrame
-    labels : list(str)
-    test : str
-
-    Returns
-    -------
-    df_merged : DataFrame
-
-    """
-
     df_merged = df_rm.merge(
         right=df_prof,
         left_on=["LOT", "BAG"],
@@ -250,19 +133,6 @@ def merge_tests_and_averages(df_rm, df_prof, df_blanks, labels, test):
 
 
 def set_inventory_dtypes(df):
-    """
-    Set the data types of columns in the dataframe
-
-    Parameters
-    ----------
-    df : DataFrame
-
-    Returns
-    -------
-    df : DataFrame
-
-    """
-
     df = df.fillna(0)
     df["PHYSICAL_FORMAT"] = df["PHYSICAL_FORMAT"].astype("category")
     df["ITEM_DESCRIPTION"] = df["ITEM_DESCRIPTION"].astype("category")
@@ -282,19 +152,6 @@ def set_inventory_dtypes(df):
 
 
 def set_proficient_dtypes(df):
-    """
-    Set the data types of columns in the dataframe
-
-    Parameters
-    ----------
-    df : DataFrame
-
-    Returns
-    -------
-    df : DataFrame
-
-    """
-
     df = df.fillna(0)
     df["PART"] = df["PART"].astype("category")
     df["DATE"] = pd.to_datetime(df["DATE"])
@@ -304,20 +161,6 @@ def set_proficient_dtypes(df):
 
 
 def run_tab1(df_rm, df_prof):
-    """
-    Run tab for merging inventory with Proficient data
-
-    Parameters
-    ----------
-    df_rm : DataFrame
-    df_prof : DataFrame
-
-    Returns
-    -------
-    df_merged : DataFrame
-
-    """
-
     color_labels, psd_labels, color_headers, psd_headers = find_headers(df_prof)
 
     df_prof["BAG_NUMBERS"] = pd.to_numeric(df_prof["BAG_NUMBERS"], errors="coerce")
@@ -409,7 +252,7 @@ def run_tab2(df):
                     df_temp["TARGET_L"] = target[0]
                     df_temp["TARGET_A"] = target[1]
                     df_temp["TARGET_B"] = target[2]
-                    
+
                     df_temp = df_temp.sort_values("dE", ascending=True).head(
                         number_of_options
                     )
@@ -436,19 +279,22 @@ def run_tab2(df):
             ]
         ]
         st.dataframe(df_samples, use_container_width=True)
+        
+        now = dt.datetime.now().strftime("%y%m%d%s")
+        output = f"spec_dev_samples.{now}.csv"
+
+        st.download_button(
+            label="Download data as CSV",
+            data=convert_df(df_samples),
+            file_name=output,
+            mime="text/csv",
+        )
+
     except KeyError:
         st.warning("Please select target specification(s).")
 
+
 def main():
-    """
-    Main gui
-
-    Returns
-    -------
-    None.
-
-    """
-
     path1 = st.sidebar.file_uploader(
         "Upload RM Inventory data", type="csv", accept_multiple_files=False
     )
